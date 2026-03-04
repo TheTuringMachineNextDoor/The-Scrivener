@@ -3,10 +3,10 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>The Site</title>
+  <title>Crackerbox</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Abril+Fatface&family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Satisfy&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=2"/>
+  <link rel="stylesheet" href="style.css?v=3"/>
 </head>
 <body>
 
@@ -15,7 +15,7 @@
   <!-- INTRO SCREEN -->
   <div id="intro-screen">
     <div class="intro-inner">
-      <div class="intro-logo">THE SITE</div>
+      <div class="intro-logo">Welcome to Crackerbox</div>
       <div class="intro-bar"><div class="intro-bar-fill"></div></div>
     </div>
   </div>
@@ -26,7 +26,7 @@
   <!-- HEADER -->
   <header id="site-header">
     <div class="header-inner">
-      <a href="#" class="site-title" id="site-title-btn">THE SITE</a>
+      <a href="#" class="site-title" id="site-title-btn">Crackerbox</a>
       <nav id="main-nav">
         <a href="#" onclick="navigate('stories')" data-page="stories">Stories</a>
         <a href="#" onclick="navigate('essays')"  data-page="essays">Essays</a>
@@ -76,7 +76,22 @@
         <span class="page-label">Sound</span>
         <h2 class="page-title">Music</h2>
       </div>
-      <div class="thumb-grid padded" id="list-music"></div>
+      <div class="music-tabs">
+        <button class="music-tab active" onclick="switchMusicTab('posts', this)">Write-ups</button>
+        <button class="music-tab" onclick="switchMusicTab('songs', this)">Songs &amp; Chords</button>
+        <button class="music-tab" onclick="switchMusicTab('links', this)">Streaming</button>
+      </div>
+      <div id="music-tab-posts" class="music-tab-panel active">
+        <div class="thumb-grid padded" id="list-music"></div>
+      </div>
+      <div id="music-tab-songs" class="music-tab-panel">
+        <div class="song-list" id="list-songs"></div>
+      </div>
+      <div id="music-tab-links" class="music-tab-panel">
+        <div class="streaming-placeholder">
+          <p>Streaming links coming soon.</p>
+        </div>
+      </div>
     </section>
 
     <!-- ABOUT -->
@@ -138,6 +153,7 @@
       <div class="form-group">
         <input type="text" id="post-title"    placeholder="Title"               class="field"/>
         <input type="text" id="post-subtitle" placeholder="Subtitle (optional)" class="field"/>
+        <input type="date" id="post-published-at" class="field" title="Published date"/>
         <select id="post-category" class="field">
           <option value="stories">Stories</option>
           <option value="essays">Essays</option>
@@ -192,7 +208,7 @@
     });
   </script>
 
-  <script src="supabase.js?v=2"></script>
-  <script src="app.js?v=2"></script>
+  <script src="supabase.js?v=3"></script>
+  <script src="app.js?v=3"></script>
 </body>
 </html>
