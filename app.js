@@ -1,35 +1,63 @@
-// ── State ─────────────────────────────────────────────────────────
-let currentPage  = 'home';
-let previousPage = 'home';
-let currentUser  = null;
+// ── State ──────────────────────────────────────────────────────────
+let currentPage   = 'home';
+let previousPage  = 'home';
+let currentUser   = null;
 let editingPostId = null;
-let allPosts     = [];
+let allPosts      = [];
+let carouselIndex = 0;
+let carouselTotal = 0;
+let carouselTimer = null;
+let thumbFileB64  = null;
+let coverFileB64  = null;
+let currentPostId = null;
 
-// ── Wait for Supabase ─────────────────────────────────────────────
+// ── Boot ───────────────────────────────────────────────────────────
 window.addEventListener('supabase-ready', async () => {
   await checkSession();
   await loadAllPosts();
-  renderHome();
+  runIntro();
 });
 
-// ── Simple Markdown renderer ──────────────────────────────────────
-function renderMarkdown(text) {
-  if (!text) return '';
-  return text
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-    .replace(/^## (.+)$/gm, '<h2>$1</h2>')
-    .replace(/^# (.+)$/gm, '<h2>$1</h2>')
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/^> (.+)$/gm, '<blockquote>$1</blockquote>')
-    .replace(/^---$/gm, '<hr>')
-    .replace(/\n\n/g, '</p><p>')
-    .replace(/^(?!<[h|b|e|h])/m, '<p>')
-    + '</p>';
+// ── Intro animation ─────────────────────────────────────────────────
+function runIntro() {
+  setTimeout(() => {
+    document.getElementById('intro-screen').classList.add('hidden');
+  }, 1800);
 }
 
-// ── Auth ──────────────────────────────────────────────────────────
+// ── Markdown ────────────────────────────────────────────────────────
+function md(text) {
+  if (!text) return '';
+  let t = text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1"/>')
+    .replace(/^### (.+)$/gm,'<h3>$1</h3>')
+    .replace(/^## (.+)$/gm,'<h2>$1</h2>')
+    .replace(/^# (.+)$/gm,'<h2>$1</h2>')
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\*(.+?)\*/g,'<em>$1</em>')
+    .replace(/^> (.+)$/gm,'<blockquote>$1</blockquote>')
+    .replace(/^---$/gm,'<hr>');
+  // wrap paragraphs
+  const lines = t.split('\n');
+  let out = ''; let inP = false;
+  for (let line of lines) {
+    const isBlock = /^<(h[23]|blockquote|hr|img)/.test(line.trim());
+    if (!line.trim()) {
+      if (inP) { out += '</p>'; inP = false; }
+    } else if (isBlock) {
+      if (inP) { out += '</p>'; inP = false; }
+      out += line;
+    } else {
+      if (!inP) { out += '<p>'; inP = true; }
+      out += line + ' ';
+    }
+  }
+  if (inP) out += '</p>';
+  return out;
+}
+
+// ── Auth ────────────────────────────────────────────────────────────
 async function checkSession() {
   const { data: { session } } = await sb.auth.getSession();
   if (session) setUser(session.user);
@@ -45,218 +73,236 @@ async function login() {
   const password = document.getElementById('login-password').value;
   const errEl    = document.getElementById('login-error');
   errEl.textContent = '';
-
   const { data, error } = await sb.auth.signInWithPassword({ email, password });
   if (error) { errEl.textContent = error.message; return; }
-
   setUser(data.user);
   closeOverlay('login-overlay');
 }
 
 async function logout() {
   await sb.auth.signOut();
-  currentUser = null;
-  document.getElementById('admin-btn').style.display = 'none';
+  setUser(null);
   closeOverlay('admin-overlay');
 }
 
-// ── Navigation ────────────────────────────────────────────────────
+// ── Navigation ──────────────────────────────────────────────────────
 function navigate(page) {
   previousPage = currentPage;
   currentPage  = page;
-
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById('page-' + page).classList.add('active');
-
-  document.querySelectorAll('#main-nav a').forEach(a => {
-    a.classList.toggle('active', a.dataset.page === page);
-  });
-
-  window.scrollTo(0, 0);
+  document.querySelectorAll('#main-nav a').forEach(a =>
+    a.classList.toggle('active', a.dataset.page === page)
+  );
+  // reading progress only on post page
+  updateProgressBar(page === 'post');
+  window.scrollTo(0,0);
 }
 
 function goBack() {
-  navigate(previousPage === 'post' ? 'home' : previousPage);
+  const dest = (previousPage === 'post' || previousPage === 'home') ? 'home' : previousPage;
+  navigate(dest);
 }
 
-// ── Load posts ────────────────────────────────────────────────────
+// ── Reading progress bar ────────────────────────────────────────────
+function updateProgressBar(enable) {
+  const bar = document.getElementById('reading-progress');
+  if (!enable) { bar.style.width = '0%'; window.onscroll = null; return; }
+  window.onscroll = () => {
+    const scrollTop = window.scrollY;
+    const docH = document.documentElement.scrollHeight - window.innerHeight;
+    bar.style.width = docH > 0 ? (scrollTop / docH * 100) + '%' : '0%';
+  };
+}
+
+// ── Load posts ──────────────────────────────────────────────────────
 async function loadAllPosts() {
   const { data, error } = await sb
-    .from('posts')
-    .select('*')
+    .from('posts').select('*')
     .order('created_at', { ascending: false });
-
   if (error) { console.error(error); return; }
   allPosts = data || [];
-
-  renderList('stories');
-  renderList('essays');
-  renderList('music');
-  renderHome();
+  renderCarousel();
+  renderGrid('home-recent', allPosts.slice(0, 8), true);
+  renderGrid('list-stories', allPosts.filter(p => p.category === 'stories'));
+  renderGrid('list-essays',  allPosts.filter(p => p.category === 'essays'));
+  renderGrid('list-music',   allPosts.filter(p => p.category === 'music'));
 }
 
-// ── Render lists ──────────────────────────────────────────────────
-function renderList(category) {
-  const el    = document.getElementById('list-' + category);
-  const posts = allPosts.filter(p => p.category === category);
-
+// ── Thumbnail grid ──────────────────────────────────────────────────
+function renderGrid(elId, posts, showCat) {
+  const el = document.getElementById(elId);
   if (!posts.length) {
     el.innerHTML = '<div class="empty-state">Nothing here yet.</div>';
     return;
   }
-
-  el.innerHTML = posts.map((p, i) => `
-    <div class="post-card" onclick="openPost('${p.id}')">
-      <div class="post-card-num">${String(posts.length - i).padStart(2,'0')}</div>
-      <div class="post-card-body">
-        <div class="post-card-title">${p.title}</div>
-        ${p.subtitle ? `<div class="post-card-subtitle">${p.subtitle}</div>` : ''}
-        <div class="post-card-excerpt">${(p.body || '').replace(/[#*>]/g,'').substring(0, 160)}…</div>
-      </div>
-      <div class="post-card-meta">${formatDate(p.created_at)}</div>
-    </div>
-  `).join('');
+  el.innerHTML = posts.map(p => {
+    const imgSrc = p.thumbnail || p.cover_image;
+    const imgEl  = imgSrc
+      ? `<img class="thumb-card-img" src="${imgSrc}" alt="${p.title}" loading="lazy"/>`
+      : `<div class="thumb-card-img-placeholder">✦</div>`;
+    return `
+      <div class="thumb-card" onclick="openPost('${p.id}')">
+        ${imgEl}
+        <div class="thumb-card-body">
+          ${showCat ? `<span class="thumb-card-cat">${p.category}</span>` : ''}
+          <div class="thumb-card-title">${p.title}</div>
+          <div class="thumb-card-meta">${formatDate(p.created_at)} · ${readTime(p.body)}</div>
+        </div>
+      </div>`;
+  }).join('');
 }
 
-function renderHome() {
-  const el      = document.getElementById('home-recent');
-  const recent  = allPosts.slice(0, 6);
+// ── Carousel ────────────────────────────────────────────────────────
+function renderCarousel() {
+  const featured = allPosts.slice(0, 5);
+  carouselTotal  = featured.length;
+  const track    = document.getElementById('carousel-track');
+  const dots     = document.getElementById('carousel-dots');
 
-  if (!recent.length) {
-    el.innerHTML = '<div class="empty-state">No posts yet.</div>';
+  if (!featured.length) {
+    document.getElementById('carousel-wrap').style.display = 'none';
     return;
   }
 
-  el.innerHTML = recent.map(p => `
-    <div class="home-card" data-cat="${p.category}" onclick="openPost('${p.id}')">
-      <div class="home-card-title">${p.title}</div>
-      <div class="home-card-excerpt">${(p.body || '').replace(/[#*>]/g,'').substring(0, 120)}…</div>
-    </div>
-  `).join('');
+  track.innerHTML = featured.map(p => {
+    const img = p.cover_image || p.thumbnail;
+    return `
+      <div class="carousel-slide" onclick="openPost('${p.id}')">
+        ${img
+          ? `<img class="carousel-slide-img" src="${img}" alt="${p.title}"/>`
+          : `<div class="carousel-slide-bg"></div>`}
+        <div class="carousel-caption">
+          <span class="carousel-caption-cat">${p.category}</span>
+          <div class="carousel-caption-title">${p.title}</div>
+          ${p.subtitle ? `<div class="carousel-caption-sub">${p.subtitle}</div>` : ''}
+        </div>
+      </div>`;
+  }).join('');
+
+  dots.innerHTML = featured.map((_,i) =>
+    `<button class="carousel-dot${i===0?' active':''}" onclick="carouselGoTo(${i})"></button>`
+  ).join('');
+
+  carouselGoTo(0);
+  startCarouselAuto();
 }
 
-// ── Open single post ──────────────────────────────────────────────
+function carouselGoTo(i) {
+  carouselIndex = (i + carouselTotal) % carouselTotal;
+  document.getElementById('carousel-track').style.transform =
+    `translateX(-${carouselIndex * 100}%)`;
+  document.querySelectorAll('.carousel-dot').forEach((d,j) =>
+    d.classList.toggle('active', j === carouselIndex)
+  );
+}
+
+function carouselMove(dir) {
+  carouselGoTo(carouselIndex + dir);
+  resetCarouselAuto();
+}
+
+function startCarouselAuto() {
+  carouselTimer = setInterval(() => carouselGoTo(carouselIndex + 1), 5000);
+}
+function resetCarouselAuto() {
+  clearInterval(carouselTimer);
+  startCarouselAuto();
+}
+
+// ── Open post ────────────────────────────────────────────────────────
 function openPost(id) {
   const post = allPosts.find(p => p.id === id);
   if (!post) return;
+  currentPostId = id;
+
+  // Banner
+  const banner    = document.getElementById('post-banner');
+  const bannerSrc = post.cover_image || post.thumbnail;
+  if (bannerSrc) {
+    banner.innerHTML = `<img src="${bannerSrc}" alt="${post.title}"/>`;
+    banner.style.display = 'block';
+  } else {
+    banner.innerHTML = '';
+    banner.style.display = 'none';
+  }
 
   document.getElementById('single-post-content').innerHTML = `
     <div class="single-post-label">${post.category}</div>
     <h1 class="single-post-title">${post.title}</h1>
     ${post.subtitle ? `<div class="single-post-subtitle">${post.subtitle}</div>` : ''}
-    <div class="single-post-meta">${formatDate(post.created_at)}</div>
-    <div class="single-post-body">${renderMarkdown(post.body)}</div>
+    <div class="single-post-meta">${formatDate(post.created_at)} &nbsp;·&nbsp; ${readTime(post.body)}</div>
+    <div class="single-post-body">${md(post.body)}</div>
   `;
 
   navigate('post');
+  loadComments(id);
 }
 
-// ── About page ────────────────────────────────────────────────────
-async function loadAbout() {
-  const { data } = await sb.from('about').select('body').eq('id', 1).single();
-  if (data) {
-    document.getElementById('about-body').innerHTML = renderMarkdown(data.body);
-  }
-}
+// ── Comments ─────────────────────────────────────────────────────────
+async function loadComments(postId) {
+  const el = document.getElementById('comments-section');
+  const { data, error } = await sb
+    .from('comments').select('*')
+    .eq('post_id', postId)
+    .order('created_at', { ascending: true });
 
-// ── Admin panel ───────────────────────────────────────────────────
-function toggleAdminPanel() {
-  if (!currentUser) { showOverlay('login-overlay'); return; }
-  renderAdminList();
-  showOverlay('admin-overlay');
-}
+  const comments = data || [];
+  const deleteBtn = (id) => currentUser
+    ? `<button class="admin-delete-comment" onclick="deleteComment('${id}')">delete</button>`
+    : '';
 
-function renderAdminList() {
-  const el = document.getElementById('admin-posts-list');
-  if (!allPosts.length) { el.innerHTML = '<p style="color:var(--dim);font-size:.82rem;">No posts yet.</p>'; return; }
-
-  el.innerHTML = allPosts.map(p => `
-    <div class="admin-post-row">
-      <span>${p.title}</span>
-      <em>${p.category}</em>
-      <button onclick="openEditPost('${p.id}')">Edit</button>
+  el.innerHTML = `
+    <h3 class="comments-title">Comments (${comments.length})</h3>
+    <div class="comment-list">
+      ${comments.length ? comments.map(c => `
+        <div class="comment-item" id="comment-${c.id}">
+          <div class="comment-name">${escHtml(c.name)}</div>
+          <div class="comment-date">${formatDate(c.created_at)}</div>
+          <div class="comment-body">${escHtml(c.body)}</div>
+          ${deleteBtn(c.id)}
+        </div>`).join('') : '<p style="color:var(--dim);font-size:.85rem;font-style:italic;">No comments yet. Be the first.</p>'}
     </div>
-  `).join('');
+    <div class="comment-form">
+      <div class="comment-form-title">Leave a comment</div>
+      <input type="text" id="comment-name" placeholder="Your name" class="field"/>
+      <textarea id="comment-body" placeholder="Write a comment…" class="field" style="min-height:100px;"></textarea>
+      <div id="comment-error" class="error-msg"></div>
+      <button class="btn-submit" onclick="submitComment()">Post comment</button>
+    </div>
+  `;
 }
 
-// ── New post ──────────────────────────────────────────────────────
-function openNewPost() {
-  editingPostId = null;
-  document.getElementById('post-overlay-title').textContent = 'New Post';
-  document.getElementById('post-title').value    = '';
-  document.getElementById('post-subtitle').value = '';
-  document.getElementById('post-body').value     = '';
-  document.getElementById('post-category').value = 'stories';
-  document.getElementById('post-error').textContent = '';
-  document.getElementById('delete-post-btn').classList.add('hidden');
-  closeOverlay('admin-overlay');
-  showOverlay('post-overlay');
-}
-
-// ── Edit post ─────────────────────────────────────────────────────
-function openEditPost(id) {
-  const post = allPosts.find(p => p.id === id);
-  if (!post) return;
-
-  editingPostId = id;
-  document.getElementById('post-overlay-title').textContent = 'Edit Post';
-  document.getElementById('post-title').value    = post.title    || '';
-  document.getElementById('post-subtitle').value = post.subtitle || '';
-  document.getElementById('post-body').value     = post.body     || '';
-  document.getElementById('post-category').value = post.category || 'stories';
-  document.getElementById('post-error').textContent = '';
-  document.getElementById('delete-post-btn').classList.remove('hidden');
-  closeOverlay('admin-overlay');
-  showOverlay('post-overlay');
-}
-
-// ── Save post ─────────────────────────────────────────────────────
-async function savePost() {
-  if (!currentUser) return;
-
-  const title    = document.getElementById('post-title').value.trim();
-  const subtitle = document.getElementById('post-subtitle').value.trim();
-  const body     = document.getElementById('post-body').value.trim();
-  const category = document.getElementById('post-category').value;
-  const errEl    = document.getElementById('post-error');
-
-  if (!title) { errEl.textContent = 'Title is required.'; return; }
-  if (!body)  { errEl.textContent = 'Body is required.';  return; }
+async function submitComment() {
+  const name  = document.getElementById('comment-name').value.trim();
+  const body  = document.getElementById('comment-body').value.trim();
+  const errEl = document.getElementById('comment-error');
   errEl.textContent = '';
 
-  let error;
+  if (!name) { errEl.textContent = 'Please enter your name.'; return; }
+  if (!body) { errEl.textContent = 'Please write a comment.'; return; }
 
-  if (editingPostId) {
-    ({ error } = await sb.from('posts')
-      .update({ title, subtitle, body, category })
-      .eq('id', editingPostId));
-  } else {
-    ({ error } = await sb.from('posts')
-      .insert([{ title, subtitle, body, category }]));
-  }
+  const { error } = await sb.from('comments')
+    .insert([{ post_id: currentPostId, name, body }]);
 
   if (error) { errEl.textContent = error.message; return; }
-
-  closeOverlay('post-overlay');
-  await loadAllPosts();
+  loadComments(currentPostId);
 }
 
-// ── Delete post ───────────────────────────────────────────────────
-async function deletePost() {
-  if (!editingPostId || !currentUser) return;
-  if (!confirm('Delete this post? This cannot be undone.')) return;
-
-  const { error } = await sb.from('posts').delete().eq('id', editingPostId);
-  if (error) { document.getElementById('post-error').textContent = error.message; return; }
-
-  closeOverlay('post-overlay');
-  await loadAllPosts();
-  navigate('home');
+async function deleteComment(id) {
+  if (!currentUser) return;
+  await sb.from('comments').delete().eq('id', id);
+  loadComments(currentPostId);
 }
 
-// ── Edit about ────────────────────────────────────────────────────
+// ── About ─────────────────────────────────────────────────────────────
+async function loadAbout() {
+  const { data } = await sb.from('about').select('body').eq('id',1).single();
+  if (data) document.getElementById('about-body').innerHTML = md(data.body);
+}
+
 async function openEditAbout() {
-  const { data } = await sb.from('about').select('body').eq('id', 1).single();
+  const { data } = await sb.from('about').select('body').eq('id',1).single();
   document.getElementById('about-edit-body').value = data?.body || '';
   closeOverlay('admin-overlay');
   showOverlay('about-overlay');
@@ -265,34 +311,197 @@ async function openEditAbout() {
 async function saveAbout() {
   if (!currentUser) return;
   const body = document.getElementById('about-edit-body').value.trim();
-
-  const { error } = await sb.from('about')
-    .upsert([{ id: 1, body }], { onConflict: 'id' });
-
-  if (error) { console.error(error); return; }
-
-  document.getElementById('about-body').innerHTML = renderMarkdown(body);
+  await sb.from('about').upsert([{ id:1, body }], { onConflict:'id' });
+  document.getElementById('about-body').innerHTML = md(body);
   closeOverlay('about-overlay');
 }
 
-// ── Overlay helpers ───────────────────────────────────────────────
-function showOverlay(id)  { document.getElementById(id).classList.remove('hidden'); }
-function closeOverlay(id) { document.getElementById(id).classList.add('hidden'); }
+// ── Admin panel ───────────────────────────────────────────────────────
+function toggleAdminPanel() {
+  if (!currentUser) { showOverlay('login-overlay'); return; }
+  const el = document.getElementById('admin-posts-list');
+  el.innerHTML = allPosts.length
+    ? allPosts.map(p => `
+        <div class="admin-post-row">
+          <span>${p.title}</span>
+          <em>${p.category}</em>
+          <button onclick="openEditPost('${p.id}')">Edit</button>
+        </div>`).join('')
+    : '<p style="color:var(--dim);font-size:.82rem;">No posts yet.</p>';
+  showOverlay('admin-overlay');
+}
 
-// Close overlay on background click
-document.querySelectorAll('.overlay').forEach(ov => {
-  ov.addEventListener('click', e => {
-    if (e.target === ov) ov.classList.add('hidden');
-  });
-});
+// ── New/Edit post ─────────────────────────────────────────────────────
+function openNewPost() {
+  editingPostId = null; thumbFileB64 = null; coverFileB64 = null;
+  document.getElementById('post-overlay-title').textContent = 'New Post';
+  document.getElementById('post-title').value          = '';
+  document.getElementById('post-subtitle').value       = '';
+  document.getElementById('post-body').value           = '';
+  document.getElementById('post-category').value       = 'stories';
+  document.getElementById('post-thumbnail-url').value  = '';
+  document.getElementById('post-cover-url').value      = '';
+  document.getElementById('post-thumbnail-file').value = '';
+  document.getElementById('post-cover-file').value     = '';
+  document.getElementById('thumb-preview').className   = 'img-preview';
+  document.getElementById('cover-preview').className   = 'img-preview';
+  document.getElementById('post-error').textContent    = '';
+  document.getElementById('delete-post-btn').classList.add('hidden');
+  closeOverlay('admin-overlay');
+  showOverlay('post-overlay');
+}
 
-// ── Utils ─────────────────────────────────────────────────────────
-function formatDate(iso) {
-  if (!iso) return '';
-  return new Date(iso).toLocaleDateString('en-GB', {
-    day: 'numeric', month: 'short', year: 'numeric'
+function openEditPost(id) {
+  const post = allPosts.find(p => p.id === id);
+  if (!post) return;
+  editingPostId = id; thumbFileB64 = null; coverFileB64 = null;
+  document.getElementById('post-overlay-title').textContent = 'Edit Post';
+  document.getElementById('post-title').value         = post.title    || '';
+  document.getElementById('post-subtitle').value      = post.subtitle || '';
+  document.getElementById('post-body').value          = post.body     || '';
+  document.getElementById('post-category').value      = post.category || 'stories';
+  document.getElementById('post-thumbnail-url').value = post.thumbnail   || '';
+  document.getElementById('post-cover-url').value     = post.cover_image || '';
+  document.getElementById('post-thumbnail-file').value = '';
+  document.getElementById('post-cover-file').value    = '';
+
+  const tp = document.getElementById('thumb-preview');
+  const cp = document.getElementById('cover-preview');
+  if (post.thumbnail)   { tp.innerHTML = `<img src="${post.thumbnail}"/>`;   tp.className = 'img-preview show'; }
+  else                  { tp.className = 'img-preview'; }
+  if (post.cover_image) { cp.innerHTML = `<img src="${post.cover_image}"/>`; cp.className = 'img-preview show'; }
+  else                  { cp.className = 'img-preview'; }
+
+  document.getElementById('post-error').textContent = '';
+  document.getElementById('delete-post-btn').classList.remove('hidden');
+  closeOverlay('admin-overlay');
+  showOverlay('post-overlay');
+}
+
+// ── Image file → base64 ───────────────────────────────────────────────
+function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload  = () => res(r.result);
+    r.onerror = rej;
+    r.readAsDataURL(file);
   });
 }
 
-// ── Load about on tab click ───────────────────────────────────────
+async function previewThumb(input) {
+  const file = input.files[0]; if (!file) return;
+  thumbFileB64 = await fileToBase64(file);
+  const p = document.getElementById('thumb-preview');
+  p.innerHTML = `<img src="${thumbFileB64}"/>`;
+  p.className = 'img-preview show';
+}
+
+async function previewCover(input) {
+  const file = input.files[0]; if (!file) return;
+  coverFileB64 = await fileToBase64(file);
+  const p = document.getElementById('cover-preview');
+  p.innerHTML = `<img src="${coverFileB64}"/>`;
+  p.className = 'img-preview show';
+}
+
+// ── Upload image to Supabase Storage ─────────────────────────────────
+async function uploadImage(base64DataUrl, bucket) {
+  // Convert base64 to blob
+  const res  = await fetch(base64DataUrl);
+  const blob = await res.blob();
+  const ext  = blob.type.split('/')[1] || 'jpg';
+  const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+  const { data, error } = await sb.storage.from(bucket).upload(path, blob, {
+    contentType: blob.type, upsert: false
+  });
+  if (error) throw error;
+
+  const { data: { publicUrl } } = sb.storage.from(bucket).getPublicUrl(path);
+  return publicUrl;
+}
+
+// ── Save post ─────────────────────────────────────────────────────────
+async function savePost() {
+  if (!currentUser) return;
+  const title    = document.getElementById('post-title').value.trim();
+  const subtitle = document.getElementById('post-subtitle').value.trim();
+  const body     = document.getElementById('post-body').value.trim();
+  const category = document.getElementById('post-category').value;
+  const errEl    = document.getElementById('post-error');
+  errEl.textContent = '';
+
+  if (!title) { errEl.textContent = 'Title is required.'; return; }
+  if (!body)  { errEl.textContent = 'Body is required.';  return; }
+
+  // Resolve thumbnail
+  let thumbnail = document.getElementById('post-thumbnail-url').value.trim();
+  if (thumbFileB64) {
+    try { thumbnail = await uploadImage(thumbFileB64, 'images'); }
+    catch(e) { errEl.textContent = 'Thumbnail upload failed: ' + e.message; return; }
+  }
+
+  // Resolve cover
+  let cover_image = document.getElementById('post-cover-url').value.trim();
+  if (coverFileB64) {
+    try { cover_image = await uploadImage(coverFileB64, 'images'); }
+    catch(e) { errEl.textContent = 'Cover upload failed: ' + e.message; return; }
+  }
+
+  const payload = { title, subtitle, body, category, thumbnail, cover_image };
+  let error;
+
+  if (editingPostId) {
+    ({ error } = await sb.from('posts').update(payload).eq('id', editingPostId));
+  } else {
+    ({ error } = await sb.from('posts').insert([payload]));
+  }
+
+  if (error) { errEl.textContent = error.message; return; }
+  closeOverlay('post-overlay');
+  await loadAllPosts();
+}
+
+// ── Delete post ───────────────────────────────────────────────────────
+async function deletePost() {
+  if (!editingPostId || !currentUser) return;
+  if (!confirm('Delete this post? Cannot be undone.')) return;
+  const { error } = await sb.from('posts').delete().eq('id', editingPostId);
+  if (error) { document.getElementById('post-error').textContent = error.message; return; }
+  closeOverlay('post-overlay');
+  await loadAllPosts();
+  navigate('home');
+}
+
+// ── Overlay helpers ───────────────────────────────────────────────────
+function showOverlay(id)  { document.getElementById(id).classList.remove('hidden'); }
+function closeOverlay(id) { document.getElementById(id).classList.add('hidden'); }
+
+document.querySelectorAll('.overlay').forEach(ov =>
+  ov.addEventListener('click', e => { if (e.target === ov) ov.classList.add('hidden'); })
+);
+
+// ── File input listeners ──────────────────────────────────────────────
+window.addEventListener('supabase-ready', () => {
+  document.getElementById('post-thumbnail-file').addEventListener('change', function() { previewThumb(this); });
+  document.getElementById('post-cover-file').addEventListener('change',     function() { previewCover(this); });
+});
+
+// ── About tab ─────────────────────────────────────────────────────────
 document.querySelector('[data-page="about"]').addEventListener('click', loadAbout);
+
+// ── Utils ─────────────────────────────────────────────────────────────
+function formatDate(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-GB', { day:'numeric', month:'short', year:'numeric' });
+}
+
+function readTime(body) {
+  if (!body) return '1 min read';
+  const words = body.trim().split(/\s+/).length;
+  return Math.max(1, Math.round(words / 200)) + ' min read';
+}
+
+function escHtml(str) {
+  return (str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
