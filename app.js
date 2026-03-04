@@ -31,29 +31,21 @@ function md(text) {
   let t = text
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1"/>')
-    .replace(/^### (.+)$/gm,'<h3>$1</h3>')
-    .replace(/^## (.+)$/gm,'<h2>$1</h2>')
-    .replace(/^# (.+)$/gm,'<h2>$1</h2>')
     .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g,'<em>$1</em>')
-    .replace(/^> (.+)$/gm,'<blockquote>$1</blockquote>')
-    .replace(/^---$/gm,'<hr>');
-  // wrap paragraphs
-  const lines = t.split('\n');
-  let out = ''; let inP = false;
-  for (let line of lines) {
-    const isBlock = /^<(h[23]|blockquote|hr|img)/.test(line.trim());
-    if (!line.trim()) {
-      if (inP) { out += '</p>'; inP = false; }
-    } else if (isBlock) {
-      if (inP) { out += '</p>'; inP = false; }
-      out += line;
-    } else {
-      if (!inP) { out += '<p>'; inP = true; }
-      out += line + ' ';
-    }
+    .replace(/\*(.+?)\*/g,'<em>$1</em>');
+  const blocks = t.split(/\n\n+/);
+  let out = '';
+  for (let block of blocks) {
+    const trimmed = block.trim();
+    if (!trimmed) continue;
+    if (/^### /.test(trimmed))       { out += '<h3>' + trimmed.replace(/^### /,'') + '</h3>'; }
+    else if (/^## /.test(trimmed))   { out += '<h2>' + trimmed.replace(/^## /,'') + '</h2>'; }
+    else if (/^# /.test(trimmed))    { out += '<h2>' + trimmed.replace(/^# /,'') + '</h2>'; }
+    else if (/^> /.test(trimmed))    { out += '<blockquote>' + trimmed.replace(/^> /,'') + '</blockquote>'; }
+    else if (/^---$/.test(trimmed))  { out += '<hr>'; }
+    else if (/^<img /.test(trimmed)) { out += trimmed; }
+    else { out += '<p>' + trimmed.replace(/\n/g,'<br>') + '</p>'; }
   }
-  if (inP) out += '</p>';
   return out;
 }
 
@@ -119,7 +111,7 @@ function updateProgressBar(enable) {
 async function loadAllPosts() {
   const { data, error } = await sb
     .from('posts').select('*')
-    .order('created_at', { ascending: false });
+    .order('published_at', { ascending: false, nullsFirst: false });
   if (error) { console.error(error); return; }
   allPosts = data || [];
   renderCarousel();
@@ -147,7 +139,7 @@ function renderGrid(elId, posts, showCat) {
         <div class="thumb-card-body">
           ${showCat ? `<span class="thumb-card-cat">${p.category}</span>` : ''}
           <div class="thumb-card-title">${p.title}</div>
-          <div class="thumb-card-meta">${formatDate(p.created_at)} · ${readTime(p.body)}</div>
+          <div class="thumb-card-meta">${formatDate(p.published_at || p.created_at)} · ${readTime(p.body)}</div>
         </div>
       </div>`;
   }).join('');
@@ -231,7 +223,7 @@ function openPost(id) {
     <div class="single-post-label">${post.category}</div>
     <h1 class="single-post-title">${post.title}</h1>
     ${post.subtitle ? `<div class="single-post-subtitle">${post.subtitle}</div>` : ''}
-    <div class="single-post-meta">${formatDate(post.created_at)} &nbsp;·&nbsp; ${readTime(post.body)}</div>
+    <div class="single-post-meta">${formatDate(post.published_at || post.created_at)} &nbsp;·&nbsp; ${readTime(post.body)}</div>
     <div class="single-post-body">${md(post.body)}</div>
   `;
 
@@ -341,6 +333,8 @@ function openNewPost() {
   document.getElementById('post-category').value       = 'stories';
   document.getElementById('post-thumbnail-url').value  = '';
   document.getElementById('post-cover-url').value      = '';
+  // Default date to today
+  document.getElementById('post-published-at').value   = new Date().toISOString().split('T')[0];
   document.getElementById('post-thumbnail-file').value = '';
   document.getElementById('post-cover-file').value     = '';
   document.getElementById('thumb-preview').className   = 'img-preview';
@@ -360,6 +354,7 @@ function openEditPost(id) {
   document.getElementById('post-subtitle').value      = post.subtitle || '';
   document.getElementById('post-body').value          = post.body     || '';
   document.getElementById('post-category').value      = post.category || 'stories';
+  document.getElementById('post-published-at').value  = (post.published_at || post.created_at || '').split('T')[0];
   document.getElementById('post-thumbnail-url').value = post.thumbnail   || '';
   document.getElementById('post-cover-url').value     = post.cover_image || '';
   document.getElementById('post-thumbnail-file').value = '';
@@ -448,7 +443,9 @@ async function savePost() {
     catch(e) { errEl.textContent = 'Cover upload failed: ' + e.message; return; }
   }
 
-  const payload = { title, subtitle, body, category, thumbnail, cover_image };
+  const pubDate = document.getElementById('post-published-at').value;
+  const published_at = pubDate ? new Date(pubDate).toISOString() : new Date().toISOString();
+  const payload = { title, subtitle, body, category, thumbnail, cover_image, published_at };
   let error;
 
   if (editingPostId) {
@@ -505,3 +502,97 @@ function readTime(body) {
 function escHtml(str) {
   return (str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
+// ── Custom cursor ─────────────────────────────────────────────────
+(function() {
+  const el = document.createElement('div');
+  el.className = 'cursor';
+  document.body.appendChild(el);
+
+  document.addEventListener('mousemove', e => {
+    el.style.left = e.clientX + 'px';
+    el.style.top  = e.clientY + 'px';
+  });
+
+  document.addEventListener('mousedown', () => el.classList.add('click'));
+  document.addEventListener('mouseup',   () => el.classList.remove('click'));
+
+  document.addEventListener('mouseover', e => {
+    if (e.target.closest('a, button, .thumb-card, .song-card, .carousel-slide')) {
+      el.classList.add('hover');
+    } else {
+      el.classList.remove('hover');
+    }
+  });
+})();
+
+// ── Music tabs ────────────────────────────────────────────────────
+function switchMusicTab(tab, btn) {
+  document.querySelectorAll('.music-tab').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.music-tab-panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('music-tab-' + tab).classList.add('active');
+}
+
+// ── Song sheets ───────────────────────────────────────────────────
+async function loadSongs() {
+  const { data } = await sb.from('songs').select('*').order('created_at', { ascending: false });
+  const el = document.getElementById('list-songs');
+  if (!data || !data.length) {
+    el.innerHTML = '<div class="empty-state">No songs yet. Add them from the admin panel.</div>';
+    return;
+  }
+  el.innerHTML = data.map(s => `
+    <div class="song-card" onclick="toggleSong(this)">
+      <div class="song-card-header">
+        <div class="song-card-title">${s.title}</div>
+        <div class="song-card-meta">${s.key ? 'Key of ' + s.key : ''} ${s.capo ? '· Capo ' + s.capo : ''}</div>
+      </div>
+      <div class="song-card-body">
+        <div class="song-sheet">${renderSongSheet(s.sheet)}</div>
+      </div>
+    </div>
+  `).join('');
+}
+
+function toggleSong(card) {
+  const body = card.querySelector('.song-card-body');
+  body.classList.toggle('open');
+}
+
+function renderSongSheet(raw) {
+  if (!raw) return '';
+  // Format:
+  // [Verse] = section label
+  // chord: D Bm G A = chord line (prefixed with "chords:")
+  // > stage direction
+  // plain text = lyric line
+  // blank line = gap
+  const lines = raw.split('\n');
+  let out = '';
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) { out += '<div class="song-gap"></div>'; continue; }
+    if (/^\[.+\]$/.test(line.trim())) {
+      out += `<div class="song-section-label">${line.replace(/[\[\]]/g,'')}</div>`;
+    } else if (/^chords:/.test(line)) {
+      const chords = line.replace(/^chords:/,'').trim();
+      // peek at next line for lyric
+      const nextLine = lines[i+1] && !lines[i+1].startsWith('chords:') && !lines[i+1].startsWith('>') && !lines[i+1].startsWith('[') ? lines[i+1] : '';
+      if (nextLine) {
+        out += `<div class="song-line"><div class="song-chords">${escHtml(chords)}</div><div class="song-lyric">${escHtml(nextLine)}</div></div>`;
+        i++; // skip next line since we consumed it
+      } else {
+        out += `<div class="song-line"><div class="song-chords">${escHtml(chords)}</div><div class="song-lyric">&nbsp;</div></div>`;
+      }
+    } else if (/^>/.test(line)) {
+      out += `<div class="song-dir">${escHtml(line.replace(/^>\s*/,''))}</div>`;
+    } else {
+      out += `<div class="song-line" style="padding-top:0"><div class="song-lyric">${escHtml(line)}</div></div>`;
+    }
+  }
+  return out;
+}
+
+// Load songs when music tab is visited
+document.querySelector('[data-page="music"]').addEventListener('click', loadSongs);
