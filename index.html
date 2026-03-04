@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>The Site</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -10,13 +10,23 @@
 </head>
 <body>
 
-  <!-- GRAIN OVERLAY -->
   <div class="grain"></div>
+
+  <!-- INTRO SCREEN -->
+  <div id="intro-screen">
+    <div class="intro-inner">
+      <div class="intro-logo">THE SITE</div>
+      <div class="intro-bar"><div class="intro-bar-fill"></div></div>
+    </div>
+  </div>
+
+  <!-- READING PROGRESS -->
+  <div id="reading-progress"></div>
 
   <!-- HEADER -->
   <header id="site-header">
     <div class="header-inner">
-      <a href="#" class="site-title" onclick="navigate('home')">THE SITE</a>
+      <a href="#" class="site-title" id="site-title-btn">THE SITE</a>
       <nav id="main-nav">
         <a href="#" onclick="navigate('stories')" data-page="stories">Stories</a>
         <a href="#" onclick="navigate('essays')"  data-page="essays">Essays</a>
@@ -28,17 +38,18 @@
     <div class="header-rule"></div>
   </header>
 
-  <!-- PAGES -->
   <main id="app">
 
     <!-- HOME -->
     <section id="page-home" class="page active">
-      <div class="home-hero">
-        <div class="hero-stamp">No.1</div>
-        <h1 class="hero-title">Stories,<br>Essays &<br>Music.</h1>
-        <p class="hero-sub">A personal collection.<br>Updated irregularly.<br>Read at your own risk.</p>
+      <div class="carousel-wrap" id="carousel-wrap">
+        <div class="carousel-track" id="carousel-track"></div>
+        <button class="carousel-btn prev" onclick="carouselMove(-1)">&#8249;</button>
+        <button class="carousel-btn next" onclick="carouselMove(1)">&#8250;</button>
+        <div class="carousel-dots" id="carousel-dots"></div>
       </div>
-      <div class="home-grid" id="home-recent"></div>
+      <div class="home-section-label">Recent</div>
+      <div class="thumb-grid" id="home-recent"></div>
     </section>
 
     <!-- STORIES -->
@@ -47,7 +58,7 @@
         <span class="page-label">Fiction</span>
         <h2 class="page-title">Stories</h2>
       </div>
-      <div class="posts-list" id="list-stories"></div>
+      <div class="thumb-grid padded" id="list-stories"></div>
     </section>
 
     <!-- ESSAYS -->
@@ -56,7 +67,7 @@
         <span class="page-label">Non-Fiction</span>
         <h2 class="page-title">Essays</h2>
       </div>
-      <div class="posts-list" id="list-essays"></div>
+      <div class="thumb-grid padded" id="list-essays"></div>
     </section>
 
     <!-- MUSIC -->
@@ -65,36 +76,36 @@
         <span class="page-label">Sound</span>
         <h2 class="page-title">Music</h2>
       </div>
-      <div class="posts-list" id="list-music"></div>
+      <div class="thumb-grid padded" id="list-music"></div>
     </section>
 
     <!-- ABOUT -->
     <section id="page-about" class="page">
-      <div class="about-wrap" id="about-content">
-        <div class="page-header">
-          <span class="page-label">Who</span>
-          <h2 class="page-title">About</h2>
-        </div>
-        <div class="about-body" id="about-body">
-          <p>This is the about page. Log in as admin to edit it.</p>
-        </div>
+      <div class="page-header">
+        <span class="page-label">Who</span>
+        <h2 class="page-title">About</h2>
+      </div>
+      <div class="about-body" id="about-body">
+        <p>This is the about page. Log in as admin to edit it.</p>
       </div>
     </section>
 
-    <!-- SINGLE POST VIEW -->
+    <!-- SINGLE POST -->
     <section id="page-post" class="page">
+      <div id="post-banner"></div>
       <div class="post-wrap">
-        <button class="back-btn" onclick="goBack()">← Back</button>
+        <button class="back-btn" onclick="goBack()">&#8592; Back</button>
         <div id="single-post-content"></div>
+        <div id="comments-section"></div>
       </div>
     </section>
 
   </main>
 
-  <!-- ADMIN PANEL OVERLAY -->
+  <!-- ADMIN OVERLAY -->
   <div id="admin-overlay" class="overlay hidden">
     <div class="overlay-box">
-      <button class="close-btn" onclick="closeOverlay('admin-overlay')">✕</button>
+      <button class="close-btn" onclick="closeOverlay('admin-overlay')">&#10005;</button>
       <h3 class="overlay-title">Admin Panel</h3>
       <div class="admin-actions">
         <button class="btn-action" onclick="openNewPost()">+ New Post</button>
@@ -108,10 +119,10 @@
   <!-- LOGIN OVERLAY -->
   <div id="login-overlay" class="overlay hidden">
     <div class="overlay-box small">
-      <button class="close-btn" onclick="closeOverlay('login-overlay')">✕</button>
+      <button class="close-btn" onclick="closeOverlay('login-overlay')">&#10005;</button>
       <h3 class="overlay-title">Admin Login</h3>
       <div class="form-group">
-        <input type="email" id="login-email" placeholder="Email" class="field"/>
+        <input type="email"    id="login-email"    placeholder="Email"    class="field"/>
         <input type="password" id="login-password" placeholder="Password" class="field"/>
         <div id="login-error" class="error-msg"></div>
         <button class="btn-submit" onclick="login()">Enter</button>
@@ -119,20 +130,37 @@
     </div>
   </div>
 
-  <!-- NEW/EDIT POST OVERLAY -->
+  <!-- POST EDITOR OVERLAY -->
   <div id="post-overlay" class="overlay hidden">
     <div class="overlay-box large">
-      <button class="close-btn" onclick="closeOverlay('post-overlay')">✕</button>
+      <button class="close-btn" onclick="closeOverlay('post-overlay')">&#10005;</button>
       <h3 class="overlay-title" id="post-overlay-title">New Post</h3>
       <div class="form-group">
-        <input type="text" id="post-title" placeholder="Title" class="field"/>
+        <input type="text" id="post-title"    placeholder="Title"               class="field"/>
         <input type="text" id="post-subtitle" placeholder="Subtitle (optional)" class="field"/>
         <select id="post-category" class="field">
           <option value="stories">Stories</option>
           <option value="essays">Essays</option>
           <option value="music">Music</option>
         </select>
-        <textarea id="post-body" class="field textarea" placeholder="Write your post here. Markdown supported."></textarea>
+
+        <div class="image-input-group">
+          <label class="field-label">Thumbnail</label>
+          <input type="text" id="post-thumbnail-url" placeholder="Paste image URL…" class="field"/>
+          <div class="or-divider">or upload</div>
+          <input type="file" id="post-thumbnail-file" accept="image/*" class="field file-input"/>
+          <div id="thumb-preview" class="img-preview"></div>
+        </div>
+
+        <div class="image-input-group">
+          <label class="field-label">Banner image (top of post — leave blank to use thumbnail)</label>
+          <input type="text" id="post-cover-url" placeholder="Paste image URL…" class="field"/>
+          <div class="or-divider">or upload</div>
+          <input type="file" id="post-cover-file" accept="image/*" class="field file-input"/>
+          <div id="cover-preview" class="img-preview"></div>
+        </div>
+
+        <textarea id="post-body" class="field textarea" placeholder="Write here. Markdown: **bold** *italic* ## heading > quote --- divider. Inline image: ![alt](url)"></textarea>
         <div id="post-error" class="error-msg"></div>
         <div class="form-row">
           <button class="btn-submit" onclick="savePost()">Publish</button>
@@ -142,24 +170,25 @@
     </div>
   </div>
 
-  <!-- EDIT ABOUT OVERLAY -->
+  <!-- ABOUT EDITOR -->
   <div id="about-overlay" class="overlay hidden">
     <div class="overlay-box large">
-      <button class="close-btn" onclick="closeOverlay('about-overlay')">✕</button>
+      <button class="close-btn" onclick="closeOverlay('about-overlay')">&#10005;</button>
       <h3 class="overlay-title">Edit About</h3>
       <div class="form-group">
-        <textarea id="about-edit-body" class="field textarea" placeholder="Write your about page here. Markdown supported."></textarea>
+        <textarea id="about-edit-body" class="field textarea"></textarea>
         <button class="btn-submit" onclick="saveAbout()">Save</button>
       </div>
     </div>
   </div>
 
-  <!-- Hidden login trigger (click site title 5x) -->
   <script>
     let titleClicks = 0;
-    document.querySelector('.site-title').addEventListener('click', () => {
+    document.getElementById('site-title-btn').addEventListener('click', e => {
+      e.preventDefault();
       titleClicks++;
       if (titleClicks >= 5) { titleClicks = 0; showOverlay('login-overlay'); }
+      else navigate('home');
     });
   </script>
 
