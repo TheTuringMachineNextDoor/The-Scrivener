@@ -539,3 +539,198 @@ select.field { appearance: none; cursor: pointer; }
   .overlay-box { padding: 24px; }
   .thumb-grid { grid-template-columns: 1fr; }
 }
+
+/* ── CUSTOM CURSOR ─────────────────────────────────────── */
+*, *::before, *::after { cursor: none !important; }
+
+.cursor {
+  position: fixed;
+  width: 28px; height: 28px;
+  border: 2px solid var(--ink);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9999;
+  transform: translate(-50%, -50%);
+  transition: transform 0.12s ease, background 0.15s ease, width 0.15s ease, height 0.15s ease;
+  mix-blend-mode: multiply;
+}
+.cursor.hover {
+  width: 44px; height: 44px;
+  background: rgba(192,57,43,0.12);
+  border-color: var(--accent);
+}
+.cursor.click {
+  width: 18px; height: 18px;
+  background: var(--accent);
+}
+
+/* ── REMOVE STICKY HEADER BAR SHADOW ──────────────────── */
+#site-header {
+  box-shadow: none !important;
+  border-bottom: none !important;
+}
+
+/* ── WIDER POST BODY ───────────────────────────────────── */
+.post-wrap {
+  max-width: 860px;
+}
+
+.single-post-body {
+  font-size: 1.05rem;
+  line-height: 2;
+  max-width: 680px;
+}
+
+.single-post-body p {
+  margin-bottom: 1.8em;
+  white-space: pre-wrap;
+}
+
+/* ── THUMBNAIL HOVER POP ───────────────────────────────── */
+.thumb-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.thumb-card:hover {
+  transform: translate(-3px, -5px);
+  box-shadow: 5px 7px 0 var(--ink);
+}
+
+/* ── MUSIC TABS ────────────────────────────────────────── */
+.music-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 48px;
+  border-bottom: 1px solid var(--border);
+  margin-top: 24px;
+}
+
+.music-tab {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;
+  padding: 12px 24px;
+  font-family: var(--fb);
+  font-size: 0.72rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: -1px;
+  transition: all 0.2s;
+}
+.music-tab:hover { color: var(--ink); }
+.music-tab.active {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+.music-tab-panel { display: none; }
+.music-tab-panel.active { display: block; }
+
+/* ── SONG SHEET ────────────────────────────────────────── */
+.song-list {
+  padding: 32px 48px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.song-card {
+  border: 1px solid var(--border);
+  background: var(--white);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.song-card:hover {
+  transform: translate(-2px,-3px);
+  box-shadow: 4px 5px 0 var(--ink);
+}
+
+.song-card-header {
+  padding: 20px 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+}
+
+.song-card-title {
+  font-family: var(--fd);
+  font-size: 1.3rem;
+}
+
+.song-card-meta {
+  font-size: 0.7rem;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.song-card-body {
+  display: none;
+  padding: 0 24px 28px;
+  border-top: 1px solid var(--border);
+}
+.song-card-body.open { display: block; }
+
+.song-sheet {
+  font-family: var(--fb);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  margin-top: 16px;
+}
+
+.song-section-label {
+  font-size: 0.62rem;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin: 20px 0 10px;
+}
+
+.song-line {
+  position: relative;
+  padding-top: 18px;
+  margin-bottom: 4px;
+}
+
+.song-chords {
+  position: absolute;
+  top: 0; left: 0;
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: var(--accent);
+  white-space: pre;
+  line-height: 1;
+  letter-spacing: 0.04em;
+}
+
+.song-lyric {
+  font-style: italic;
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.song-dir {
+  font-size: 0.75rem;
+  color: var(--dim);
+  font-style: normal;
+  border-left: 2px solid var(--border);
+  padding-left: 10px;
+  margin: 10px 0;
+  line-height: 1.6;
+}
+
+.song-gap { height: 10px; }
+
+/* ── STREAMING PLACEHOLDER ─────────────────────────────── */
+.streaming-placeholder {
+  padding: 80px 48px;
+  color: var(--dim);
+  font-style: italic;
+}
+
+/* ── HIDE READING PROGRESS BLACK TOP BAR ──────────────── */
+#reading-progress {
+  top: 0;
+}
